@@ -243,11 +243,11 @@ python mcp_cloud_fabric.py
 | `execute_dax` | Chạy DAX query | ❌ | - |
 | `get_dataset_info` | Lấy metadata dataset | ❌ | - |
 | `refresh_dataset` | Trigger refresh | ❌ | - |
-| `create_measure` | **Tạo measure mới** | ✅ | ✅ Auto |
-| `delete_measure` | **Xóa measure** | ✅ | ✅ Auto |
-| `create_relationship` | **Tạo relationship** | ✅ | ✅ Auto |
+| `create_measure` | **Tạo measure mới** | ✅ | 📜 Script |
+| `delete_measure` | **Xóa measure** | ✅ | 📜 Script |
+| `create_relationship` | **Tạo relationship** | ✅ | 📜 Script |
 
-> **XMLA Write**: Các tool có ✅ Auto sẽ thực thi TMSL trực tiếp qua XMLA endpoint nếu có Fabric/Premium capacity.
+> ⚠️ **macOS Limitation**: Power BI XMLA endpoint yêu cầu Analysis Services protocol (không phải REST API), chỉ khả dụng qua Windows tools. Các tool write sẽ trả về TMSL script để bạn copy và chạy trong **SSMS** hoặc **Tabular Editor**.
 
 ### Data Warehouse Mode (3 Tools)
 

@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 
 import requests
 
-from ..auth import FabricAuthManager
+from src.auth import FabricAuthManager
 
 
 # XMLA SOAP envelope templates
@@ -100,12 +100,11 @@ class XMLAClient:
     def _normalize_endpoint(self, endpoint: str) -> str:
         """Convert powerbi:// URL to HTTPS XMLA endpoint."""
         if endpoint.startswith("powerbi://"):
-            # Convert powerbi://api.powerbi.com/v1.0/myorg/Workspace
-            # to https://api.powerbi.com/v1.0/myorg/Workspace/xmla
-            https_url = endpoint.replace("powerbi://", "https://")
-            if not https_url.endswith("/xmla"):
-                https_url = https_url.rstrip("/") + "/xmla"
-            return https_url
+            # powerbi://api.powerbi.com/v1.0/myorg/WorkspaceName
+            # -> https://analysis.windows.net/powerbi/api/v1.0/myorg/WorkspaceName
+            # Note: Power BI XMLA uses analysis.windows.net endpoint
+            workspace = endpoint.split("/myorg/")[-1].strip("/")
+            return f"https://analysis.windows.net/powerbi/api/v1.0/myorg/{workspace}"
         return endpoint
     
     def _extract_catalog(self, endpoint: str) -> str:

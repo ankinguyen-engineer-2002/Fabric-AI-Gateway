@@ -14,8 +14,10 @@ warnings.filterwarnings("ignore")
 os.environ["PYTHONWARNINGS"] = "ignore"
 
 src_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(src_dir)
 sys.path.insert(0, src_dir)
-os.chdir(os.path.dirname(src_dir))
+sys.path.insert(0, project_root)  # Add project root for package imports
+os.chdir(project_root)
 
 import requests
 from auth import get_auth_manager, load_config
@@ -28,7 +30,7 @@ except ImportError:
 
 # Import XMLA client for direct TMSL execution
 try:
-    from utils.xmla_client import XMLAClient
+    from src.utils.xmla_client import XMLAClient
     XMLA_AVAILABLE = True
 except ImportError:
     XMLAClient = None
@@ -71,10 +73,13 @@ class FabricMCPServer:
                     self.sql_endpoint = ctx.get("sql_endpoint")
                     self.database_name = ctx.get("item_name")
             
-            # 3. Initialize XMLA client if available and in semantic mode
-            if XMLA_AVAILABLE and self.mode == "semantic" and self.workspace_name:
-                xmla_endpoint = f"powerbi://api.powerbi.com/v1.0/myorg/{self.workspace_name}"
-                self.xmla_client = XMLAClient(xmla_endpoint, self.auth, self.dataset_name)
+            # Note: XMLA client disabled on macOS
+            # Power BI XMLA endpoint requires Analysis Services protocol (not REST API)
+            # which is only available via Windows tools (SSMS, Tabular Editor) or .NET TOM library.
+            # TMSL scripts will be returned for manual execution in SSMS/Tabular Editor.
+            # if XMLA_AVAILABLE and self.mode == "semantic" and self.workspace_name:
+            #     xmla_endpoint = f"powerbi://api.powerbi.com/v1.0/myorg/{self.workspace_name}"
+            #     self.xmla_client = XMLAClient(xmla_endpoint, self.auth, self.dataset_name)
             
             return True
         except Exception as e:

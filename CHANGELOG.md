@@ -69,6 +69,13 @@
 | Semantic Mode không linh hoạt | Bắt chọn dataset trước | Đổi thành chỉ chọn Workspace, AI tự list/connect |
 | Warehouse Name sai | Tự parse từ endpoint | Thêm prompt nhập rõ ràng |
 
+#### Lỗi XMLA Client
+| Lỗi | Nguyên nhân | Giải pháp |
+|-----|-------------|-----------|
+| `XMLA client not available` | Import path sai (relative vs absolute) | Fix import path trong `mcp_server.py` và `xmla_client.py` |
+| `workspace_name` missing | Context không save đủ fields | Đảm bảo `save_context()` lưu cả `workspace_name` |
+| 404 XMLA endpoint | Power BI XMLA dùng Analysis Services protocol, không phải REST | **macOS Limitation**: Trả về TMSL script cho user chạy trong SSMS/Tabular Editor |
+
 ---
 
 ### ⚡ Tính năng mới
