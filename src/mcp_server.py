@@ -139,49 +139,34 @@ class FabricMCPServer:
             elif name == "get_measures":
                 if not self.dataset_id:
                     return {"error": "No dataset connected"}
-                # Try DAX query to get measures
-                dax = """
-                EVALUATE
-                SELECTCOLUMNS(
-                    INFO.MEASURES(),
-                    "Table", [TableID],
-                    "Name", [Name],
-                    "Expression", [Expression],
-                    "Description", [Description]
-                )
-                """
+                # Simple INFO.MEASURES() - returns all columns
+                dax = "EVALUATE INFO.MEASURES()"
                 try:
                     data = {"queries": [{"query": dax}], "serializerSettings": {"includeNulls": True}}
                     res = self.semantic_request("POST", f"/groups/{self.workspace_id}/datasets/{self.dataset_id}/executeQueries", data)
                     measures = res["results"][0]["tables"][0]["rows"]
                     return {"measures": measures}
-                except:
-                    # Fallback: INFO.MEASURES() requires Premium. Try alternative.
-                    return {"error": "INFO.MEASURES() requires Premium/Fabric capacity. Use DAX Studio or Tabular Editor for Pro datasets."}
+                except requests.exceptions.HTTPError as e:
+                    error_detail = e.response.text if e.response else str(e)
+                    return {"error": f"INFO.MEASURES() failed: {error_detail}"}
+                except Exception as e:
+                    return {"error": f"INFO.MEASURES() failed: {str(e)}"}
             
             elif name == "get_relationships":
                 if not self.dataset_id:
                     return {"error": "No dataset connected"}
-                dax = """
-                EVALUATE
-                SELECTCOLUMNS(
-                    INFO.RELATIONSHIPS(),
-                    "ID", [ID],
-                    "FromTable", [FromTableID],
-                    "FromColumn", [FromColumnID],
-                    "ToTable", [ToTableID],
-                    "ToColumn", [ToColumnID],
-                    "IsActive", [IsActive],
-                    "CrossFilteringBehavior", [CrossFilteringBehavior]
-                )
-                """
+                # Simple INFO.RELATIONSHIPS() query - returns all columns
+                dax = "EVALUATE INFO.RELATIONSHIPS()"
                 try:
                     data = {"queries": [{"query": dax}], "serializerSettings": {"includeNulls": True}}
                     res = self.semantic_request("POST", f"/groups/{self.workspace_id}/datasets/{self.dataset_id}/executeQueries", data)
                     relationships = res["results"][0]["tables"][0]["rows"]
                     return {"relationships": relationships}
-                except:
-                    return {"error": "INFO.RELATIONSHIPS() requires Premium/Fabric capacity."}
+                except requests.exceptions.HTTPError as e:
+                    error_detail = e.response.text if e.response else str(e)
+                    return {"error": f"INFO.RELATIONSHIPS() failed: {error_detail}"}
+                except Exception as e:
+                    return {"error": f"INFO.RELATIONSHIPS() failed: {str(e)}"}
             
             elif name == "get_columns":
                 if not self.dataset_id:
