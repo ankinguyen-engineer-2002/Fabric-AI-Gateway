@@ -231,21 +231,23 @@ python mcp_cloud_fabric.py
 
 ### Semantic Model Mode (13 Tools)
 
-| Tool | Mô tả | Premium? |
-|------|-------|----------|
-| `list_workspaces` | Liệt kê tất cả workspaces | ❌ |
-| `list_datasets` | Liệt kê semantic models trong workspace | ❌ |
-| `connect_dataset` | Kết nối tới một model | ❌ |
-| `get_tables` | Lấy danh sách tables + số columns | ❌ |
-| `get_columns` | Lấy chi tiết columns (có filter) | ❌ |
-| `get_measures` | Lấy tất cả measures | ✅ |
-| `get_relationships` | Lấy tất cả relationships | ✅ |
-| `execute_dax` | Chạy DAX query | ❌ |
-| `get_dataset_info` | Lấy metadata dataset | ❌ |
-| `refresh_dataset` | Trigger refresh | ❌ |
-| `create_measure` | Tạo measure mới (TMSL) | ✅ |
-| `delete_measure` | Xóa measure (TMSL) | ✅ |
-| `create_relationship` | Tạo relationship (TMSL) | ✅ |
+| Tool | Mô tả | Premium? | XMLA Write? |
+|------|-------|----------|-------------|
+| `list_workspaces` | Liệt kê tất cả workspaces | ❌ | - |
+| `list_datasets` | Liệt kê semantic models trong workspace | ❌ | - |
+| `connect_dataset` | Kết nối tới một model | ❌ | - |
+| `get_tables` | Lấy danh sách tables + số columns | ❌ | - |
+| `get_columns` | Lấy chi tiết columns (có filter) | ❌ | - |
+| `get_measures` | Lấy tất cả measures | ✅ | - |
+| `get_relationships` | Lấy tất cả relationships | ✅ | - |
+| `execute_dax` | Chạy DAX query | ❌ | - |
+| `get_dataset_info` | Lấy metadata dataset | ❌ | - |
+| `refresh_dataset` | Trigger refresh | ❌ | - |
+| `create_measure` | **Tạo measure mới** | ✅ | ✅ Auto |
+| `delete_measure` | **Xóa measure** | ✅ | ✅ Auto |
+| `create_relationship` | **Tạo relationship** | ✅ | ✅ Auto |
+
+> **XMLA Write**: Các tool có ✅ Auto sẽ thực thi TMSL trực tiếp qua XMLA endpoint nếu có Fabric/Premium capacity.
 
 ### Data Warehouse Mode (3 Tools)
 
