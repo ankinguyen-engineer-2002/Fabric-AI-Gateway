@@ -26,16 +26,29 @@ try:
 except ImportError:
     pyodbc = None
 
+# Import XMLA client for direct TMSL execution
+try:
+    from utils.xmla_client import XMLAClient
+    XMLA_AVAILABLE = True
+except ImportError:
+    XMLAClient = None
+    XMLA_AVAILABLE = False
+
+import asyncio
+
 class FabricMCPServer:
     def __init__(self):
         self.mode = "semantic"
         self.sql_endpoint = None
         self.workspace_id = None
+        self.workspace_name = None
         self.dataset_id = None
+        self.dataset_name = None
         self.database_name = None
         self.token = None
         self.auth = None
         self.config = None
+        self.xmla_client = None
         
     def initialize(self):
         """Load context and connection."""
@@ -52,14 +65,36 @@ class FabricMCPServer:
                     ctx = json.load(f)
                     self.mode = ctx.get("mode", "semantic")
                     self.workspace_id = ctx.get("workspace_id")
+                    self.workspace_name = ctx.get("workspace_name")
                     self.dataset_id = ctx.get("item_id")
+                    self.dataset_name = ctx.get("item_name")
                     self.sql_endpoint = ctx.get("sql_endpoint")
                     self.database_name = ctx.get("item_name")
+            
+            # 3. Initialize XMLA client if available and in semantic mode
+            if XMLA_AVAILABLE and self.mode == "semantic" and self.workspace_name:
+                xmla_endpoint = f"powerbi://api.powerbi.com/v1.0/myorg/{self.workspace_name}"
+                self.xmla_client = XMLAClient(xmla_endpoint, self.auth, self.dataset_name)
             
             return True
         except Exception as e:
             sys.stderr.write(f"Init Error: {e}\n")
             return False
+    
+    def execute_tmsl(self, tmsl_dict):
+        """Execute TMSL command via XMLA endpoint."""
+        if not self.xmla_client:
+            return {"error": "XMLA client not initialized. Workspace name may be missing."}
+        
+        try:
+            tmsl_json = json.dumps(tmsl_dict)
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result = loop.run_until_complete(self.xmla_client.execute_tmsl(tmsl_json))
+            loop.close()
+            return result
+        except Exception as e:
+            return {"error": f"TMSL execution failed: {str(e)}"}
 
     # ================= SEMANTIC TOOLS =================
     def semantic_request(self, method, path, data=None):
@@ -213,16 +248,15 @@ class FabricMCPServer:
                 measure_name = args.get("name")
                 expression = args.get("expression")
                 description = args.get("description", "")
+                execute_now = args.get("execute", True)  # Default to execute
                 
                 if not all([table_name, measure_name, expression]):
                     return {"error": "table_name, name, and expression are required"}
                 
-                # This requires XMLA write access (Premium/Fabric PPU)
-                # For now, return the TMSL script that user can execute manually
                 tmsl = {
                     "createOrReplace": {
                         "object": {
-                            "database": self.dataset_id,
+                            "database": self.dataset_name or self.dataset_id,
                             "table": table_name,
                             "measure": measure_name
                         },
@@ -233,17 +267,27 @@ class FabricMCPServer:
                         }
                     }
                 }
-                return {
-                    "status": "tmsl_generated",
-                    "note": "XMLA write requires Premium/Fabric. Execute this TMSL in SSMS or Tabular Editor.",
-                    "tmsl": tmsl
-                }
+                
+                # Try to execute via XMLA if available
+                if execute_now and self.xmla_client:
+                    result = self.execute_tmsl(tmsl)
+                    if result.get("status") == "success":
+                        return {"status": "success", "message": f"Measure '{measure_name}' created successfully!"}
+                    else:
+                        return {"status": "error", "message": result.get("error") or result.get("message"), "tmsl": tmsl}
+                else:
+                    return {
+                        "status": "tmsl_generated",
+                        "note": "XMLA client not available. Execute this TMSL manually in SSMS or Tabular Editor.",
+                        "tmsl": tmsl
+                    }
             
             elif name == "delete_measure":
                 if not self.dataset_id:
                     return {"error": "No dataset connected"}
                 table_name = args.get("table_name")
                 measure_name = args.get("name")
+                execute_now = args.get("execute", True)
                 
                 if not all([table_name, measure_name]):
                     return {"error": "table_name and name are required"}
@@ -251,17 +295,25 @@ class FabricMCPServer:
                 tmsl = {
                     "delete": {
                         "object": {
-                            "database": self.dataset_id,
+                            "database": self.dataset_name or self.dataset_id,
                             "table": table_name,
                             "measure": measure_name
                         }
                     }
                 }
-                return {
-                    "status": "tmsl_generated",
-                    "note": "XMLA write requires Premium/Fabric. Execute this TMSL in SSMS or Tabular Editor.",
-                    "tmsl": tmsl
-                }
+                
+                if execute_now and self.xmla_client:
+                    result = self.execute_tmsl(tmsl)
+                    if result.get("status") == "success":
+                        return {"status": "success", "message": f"Measure '{measure_name}' deleted successfully!"}
+                    else:
+                        return {"status": "error", "message": result.get("error") or result.get("message"), "tmsl": tmsl}
+                else:
+                    return {
+                        "status": "tmsl_generated",
+                        "note": "XMLA client not available. Execute this TMSL manually.",
+                        "tmsl": tmsl
+                    }
             
             elif name == "create_relationship":
                 from_table = args.get("from_table")
@@ -269,6 +321,7 @@ class FabricMCPServer:
                 to_table = args.get("to_table")
                 to_column = args.get("to_column")
                 is_active = args.get("is_active", True)
+                execute_now = args.get("execute", True)
                 
                 if not all([from_table, from_column, to_table, to_column]):
                     return {"error": "from_table, from_column, to_table, to_column are required"}
@@ -277,7 +330,7 @@ class FabricMCPServer:
                 tmsl = {
                     "createOrReplace": {
                         "object": {
-                            "database": self.dataset_id,
+                            "database": self.dataset_name or self.dataset_id,
                             "relationship": rel_name
                         },
                         "relationship": {
@@ -290,11 +343,19 @@ class FabricMCPServer:
                         }
                     }
                 }
-                return {
-                    "status": "tmsl_generated",
-                    "note": "XMLA write requires Premium/Fabric. Execute this TMSL in SSMS or Tabular Editor.",
-                    "tmsl": tmsl
-                }
+                
+                if execute_now and self.xmla_client:
+                    result = self.execute_tmsl(tmsl)
+                    if result.get("status") == "success":
+                        return {"status": "success", "message": f"Relationship '{rel_name}' created successfully!"}
+                    else:
+                        return {"status": "error", "message": result.get("error") or result.get("message"), "tmsl": tmsl}
+                else:
+                    return {
+                        "status": "tmsl_generated",
+                        "note": "XMLA client not available. Execute this TMSL manually.",
+                        "tmsl": tmsl
+                    }
             
             else:
                 return {"error": f"Unknown tool: {name}"}
