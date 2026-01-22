@@ -139,8 +139,16 @@ class FabricMCPServer:
             elif name == "get_measures":
                 if not self.dataset_id:
                     return {"error": "No dataset connected"}
-                # Simple INFO.MEASURES() - returns all columns
-                dax = "EVALUATE INFO.MEASURES()"
+                # Use SELECTCOLUMNS format - works better than simple INFO.MEASURES()
+                dax = """EVALUATE SELECTCOLUMNS(
+                    INFO.MEASURES(),
+                    "TableID", [TableID],
+                    "Name", [Name],
+                    "Expression", [Expression],
+                    "Description", [Description],
+                    "DataType", [DataType],
+                    "IsHidden", [IsHidden]
+                )"""
                 try:
                     data = {"queries": [{"query": dax}], "serializerSettings": {"includeNulls": True}}
                     res = self.semantic_request("POST", f"/groups/{self.workspace_id}/datasets/{self.dataset_id}/executeQueries", data)
@@ -155,8 +163,17 @@ class FabricMCPServer:
             elif name == "get_relationships":
                 if not self.dataset_id:
                     return {"error": "No dataset connected"}
-                # Simple INFO.RELATIONSHIPS() query - returns all columns
-                dax = "EVALUATE INFO.RELATIONSHIPS()"
+                # Use SELECTCOLUMNS format - discovered by Gemini to work!
+                dax = """EVALUATE SELECTCOLUMNS(
+                    INFO.RELATIONSHIPS(),
+                    "ID", [ID],
+                    "FromTableID", [FromTableID],
+                    "FromColumnID", [FromColumnID],
+                    "ToTableID", [ToTableID],
+                    "ToColumnID", [ToColumnID],
+                    "IsActive", [IsActive],
+                    "CrossFilteringBehavior", [CrossFilteringBehavior]
+                )"""
                 try:
                     data = {"queries": [{"query": dax}], "serializerSettings": {"includeNulls": True}}
                     res = self.semantic_request("POST", f"/groups/{self.workspace_id}/datasets/{self.dataset_id}/executeQueries", data)
