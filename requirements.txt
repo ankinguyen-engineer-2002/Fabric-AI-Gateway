@@ -1,0 +1,13 @@
+# Fabric AI Gateway - MCP Server for macOS
+
+msal>=1.24.0
+pyodbc>=5.0.0
+# MCP Server - Install from: pip install "mcp[cli]" or from GitHub
+# mcp>=1.0.0
+requests>=2.31.0
+pyyaml>=6.0.1
+python-dotenv>=1.0.0
+tabulate>=0.9.0
+rich>=13.7.0
+pytest>=7.4.0
+

@@ -1,0 +1,99 @@
+#!/bin/bash
+#
+# fabricgw - Main launcher for Fabric AI Gateway
+#
+# Usage: fabricgw [gemini|codex|cli]
+#
+
+set -euo pipefail
+
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+PROJECT_DIR="/Users/MAC/Documents/MCP_Cloud_Fabric"
+SCRIPT_DIR="${PROJECT_DIR}/scripts"
+
+show_menu() {
+    echo ""
+    echo -e "${BLUE}╭─────────────────────────────────────╮${NC}"
+    echo -e "${BLUE}│  ${CYAN}🚀 Fabric AI Gateway${BLUE}              │${NC}"
+    echo -e "${BLUE}╰─────────────────────────────────────╯${NC}"
+    echo ""
+    echo -e "  ${CYAN}[1]${NC} Gemini CLI  - Google AI"
+    echo -e "  ${CYAN}[2]${NC} Codex CLI   - OpenAI"
+    echo -e "  ${CYAN}[3]${NC} Standalone  - Interactive CLI"
+    echo -e "  ${CYAN}[0]${NC} Exit"
+    echo ""
+}
+
+launch_gemini() {
+    if [ -x "${SCRIPT_DIR}/geminigw" ]; then
+        exec "${SCRIPT_DIR}/geminigw"
+    else
+        echo "Error: geminigw script not found"
+        exit 1
+    fi
+}
+
+launch_codex() {
+    if [ -x "${SCRIPT_DIR}/codexgw" ]; then
+        exec "${SCRIPT_DIR}/codexgw"
+    else
+        echo "Error: codexgw script not found"
+        exit 1
+    fi
+}
+
+launch_cli() {
+    cd "$PROJECT_DIR"
+    source venv/bin/activate
+    python src/quickstart.py
+}
+
+# Handle command line argument
+if [ $# -gt 0 ]; then
+    case "$1" in
+        gemini|1)
+            launch_gemini
+            ;;
+        codex|2)
+            launch_codex
+            ;;
+        cli|3)
+            launch_cli
+            ;;
+        *)
+            echo "Usage: fabricgw [gemini|codex|cli]"
+            exit 1
+            ;;
+    esac
+    exit 0
+fi
+
+# Interactive menu
+while true; do
+    show_menu
+    read -p "Select [1-3, 0 to exit]: " choice
+    
+    case "$choice" in
+        1)
+            launch_gemini
+            ;;
+        2)
+            launch_codex
+            ;;
+        3)
+            launch_cli
+            ;;
+        0|q|exit)
+            echo -e "\n${YELLOW}Goodbye!${NC}"
+            exit 0
+            ;;
+        *)
+            echo -e "${YELLOW}Invalid choice${NC}"
+            ;;
+    esac
+done

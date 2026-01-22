@@ -1,0 +1,38 @@
+# Fabric AI Gateway Configuration
+# Copy this file to config.yaml and fill in your values
+
+auth:
+  # Azure AD App Registration
+  client_id: "YOUR_APP_CLIENT_ID"
+  tenant_id: "YOUR_TENANT_ID"
+  # Optional: Use common for multi-tenant
+  # tenant_id: "common"
+
+limits:
+  # Maximum rows returned from DAX queries
+  max_dax_rows: 1000
+  # Maximum tables to include in context
+  max_tables_in_context: 50
+  # Maximum columns per table in context
+  max_columns_per_table: 100
+  # Sample rows for table profiling
+  sample_rows: 10
+  # Maximum SQL result rows
+  max_sql_result_rows: 500
+
+security:
+  # Always encrypt SQL connections
+  encrypt_connection: true
+  # Never trust self-signed certificates
+  trust_server_certificate: false
+  # Enable audit logging for write operations
+  audit_write_operations: true
+
+paths:
+  # Token cache location (supports ~ expansion)
+  token_cache: "~/.fabric-gateway/token_cache.bin"
+  # Audit log location
+  audit_log: "~/.fabric-gateway/audit.log"
+
+# Default SQL endpoint (optional, can be set interactively)
+# sql_endpoint: "your-workspace.datawarehouse.fabric.microsoft.com"
