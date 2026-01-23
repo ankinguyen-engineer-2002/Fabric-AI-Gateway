@@ -53,6 +53,7 @@ class SemanticModelAdapter:
         """
         self.auth = auth
         self._connected_model_id: Optional[str] = None
+        self._connected_model_name: Optional[str] = None
         self._xmla_endpoint: Optional[str] = None
     
     def _get_headers(self) -> dict[str, str]:
@@ -143,7 +144,20 @@ class SemanticModelAdapter:
         ctx = get_context()
         if ctx.semantic_context:
             workspace_name = ctx.semantic_context.workspace_name
+            workspace_id = ctx.semantic_context.workspace_id
             self._xmla_endpoint = f"powerbi://api.powerbi.com/v1.0/myorg/{workspace_name}"
+            
+            # Resolve model name (required for Catalog and TMSL)
+            try:
+                models = await self.list_models(workspace_id)
+                for m in models:
+                    if m["id"] == model_id:
+                        self._connected_model_name = m["name"]
+                        break
+            except Exception as e:
+                # Fallback if listing fails or name not found (unlikely)
+                print(f"Warning: Could not resolve model name: {e}")
+                self._connected_model_name = model_id # Fallback to ID
         
         return True
     
@@ -167,7 +181,8 @@ class SemanticModelAdapter:
         from .utils.xmla_client import XMLAClient
         
         try:
-            client = XMLAClient(self._xmla_endpoint, self.auth)
+            # Use model name as Catalog
+            client = XMLAClient(self._xmla_endpoint, self.auth, catalog=self._connected_model_name)
             
             # Query tables
             tables = await client.query_dmv(
@@ -227,7 +242,7 @@ class SemanticModelAdapter:
         from .utils.xmla_client import XMLAClient
         
         try:
-            client = XMLAClient(self._xmla_endpoint, self.auth)
+            client = XMLAClient(self._xmla_endpoint, self.auth, catalog=self._connected_model_name)
             results = await client.execute_dax(query, max_rows)
             
             # Format as markdown table
@@ -289,12 +304,24 @@ class SemanticModelAdapter:
             result["status"] = "preview"
             result["message"] = "Dry run - no changes made. Set dry_run=False to apply."
         else:
-            # TODO: Execute TMSL via XMLA
-            # from .utils.xmla_client import XMLAClient
-            # client = XMLAClient(self._xmla_endpoint, self.auth)
-            # await client.execute_tmsl(tmsl_payload)
-            result["status"] = "not_implemented"
-            result["message"] = "TMSL execution not yet implemented"
+            try:
+                from .utils.xmla_client import XMLAClient
+                client = XMLAClient(self._xmla_endpoint, self.auth, catalog=self._connected_model_name)
+                
+                # Replace <database> placeholder with actual model name
+                db_name = self._connected_model_name or self._connected_model_id
+                final_tmsl = tmsl_payload.replace("<database>", db_name)
+                
+                # Execute
+                execution_result = await client.execute_tmsl(final_tmsl)
+                result["status"] = execution_result["status"]
+                result["message"] = execution_result["message"]
+                if "details" in execution_result:
+                    result["details"] = execution_result["details"]
+                    
+            except Exception as e:
+                result["status"] = "error"
+                result["message"] = str(e)
         
         return result
     
@@ -331,7 +358,23 @@ class SemanticModelAdapter:
             result["status"] = "preview"
             result["message"] = "Dry run - no changes made. Set dry_run=False to apply."
         else:
-            result["status"] = "not_implemented"
-            result["message"] = "TMSL execution not yet implemented"
+            try:
+                from .utils.xmla_client import XMLAClient
+                client = XMLAClient(self._xmla_endpoint, self.auth, catalog=self._connected_model_name)
+                
+                # Replace <database> placeholder
+                db_name = self._connected_model_name or self._connected_model_id
+                final_tmsl = tmsl_payload.replace("<database>", db_name)
+                
+                # Execute
+                execution_result = await client.execute_tmsl(final_tmsl)
+                result["status"] = execution_result["status"]
+                result["message"] = execution_result["message"]
+                if "details" in execution_result:
+                    result["details"] = execution_result["details"]
+
+            except Exception as e:
+                result["status"] = "error"
+                result["message"] = str(e)
         
         return result

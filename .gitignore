@@ -33,5 +33,23 @@ config.yaml
 # Temporary files
 *.tmp
 *.bak
+
+# Debug/Verification scripts
 debug_*.py
 simulate_*.py
+verify_*.py
+check_*.py
+run_*.py
+test_fix*.py
+create_dump*.py
+download_*.py
+output.txt
+
+# Sensitive data
+token.txt
+*.token
+
+# .NET build artifacts
+**/bin/
+**/obj/
+

@@ -49,7 +49,9 @@ class FabricClient:
         self.ws_name = None
         self.item_id = None # dataset_id or warehouse_id
         self.item_name = None
+        self.item_name = None
         self.sql_endpoint = None # for warehouse
+        self.toolset_mode = "standard" # standard or admin
     
     def get(self, path):
         r = requests.get(f"{self.base}{path}", headers=self.headers)
@@ -90,7 +92,9 @@ class FabricClient:
             "workspace_name": self.ws_name,
             "item_id": self.item_id, # dataset or warehouse id
             "item_name": self.item_name,
-            "sql_endpoint": self.sql_endpoint
+            "item_name": self.item_name,
+            "sql_endpoint": self.sql_endpoint,
+            "toolset_mode": self.toolset_mode
         }
         
         with open(path, "w") as f:
@@ -142,6 +146,16 @@ def main():
         # Don't select dataset here - let AI do it via MCP tools
         client.item_id = None
         client.item_name = None
+        
+        # 4. Select Toolset Mode
+        console.print("\n[bold]Select Toolset Mode:[/bold]")
+        console.print("  [cyan][1][/cyan] Standard (Safe: Read-only, Q&A)")
+        console.print("  [cyan][2][/cyan] Admin (Write: Measures, Relationships - Uses Middleware)")
+        
+        ts_choice = IntPrompt.ask("\nChoice", choices=["1", "2"], default="1")
+        client.toolset_mode = "admin" if ts_choice == 2 else "standard"
+        
+        console.print(f"[yellow]Toolset Mode: {client.toolset_mode.upper()}[/yellow]")
         
     else:
         client.mode = "warehouse"

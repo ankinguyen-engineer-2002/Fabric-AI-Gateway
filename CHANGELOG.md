@@ -4,6 +4,45 @@
 
 ---
 
+## v1.0.1 - 2026-01-23
+
+### 🐛 Bug Fixes (P0)
+
+| Lỗi | Nguyên nhân | Giải pháp |
+|-----|-------------|-----------|
+| Admin tools không trả về trong `get_tools()` | `return` statement nằm trước block `if self.toolset_mode == "admin"` | Đổi thành gán `tools = [...]` rồi `tools.extend(admin_tools)` |
+| Dead code trong `create_measure` | Dòng `return self.execute_tmsl(tmsl)` nằm trước conditional logic | Xóa early return, giữ conditional logic |
+| C# binary chưa build | Target framework `.NET 10.0` (chưa release) | Đổi về `.NET 8.0` LTS, rebuild binary |
+
+### 🔒 Security Fixes (P1)
+
+| Vấn đề | Giải pháp |
+|--------|-----------|
+| SQL Injection trong `get_warehouse_tables` | Thêm `_validate_identifier()` + parameterized queries |
+| SQL Injection trong `describe_table` | Thêm identifier validation + parameterized queries |
+| Dangerous SQL trong `execute_sql` | Block keywords: DROP, DELETE, TRUNCATE, ALTER, CREATE, INSERT, UPDATE, EXEC, GRANT, REVOKE |
+| Corrupt `context.json` crash | Thêm try/except cho `json.JSONDecodeError` và `IOError` |
+
+### ✨ New Features (P2)
+
+| Feature | Mô tả |
+|---------|-------|
+| `delete_relationship` tool | Thêm tool xóa relationship (Python handler + C# middleware) |
+
+**Admin tools hiện có:** `create_measure`, `delete_measure`, `create_relationship`, `delete_relationship`
+
+### 🗺️ Roadmap: macOS XMLA Write Support
+
+> ⚠️ **Known Limitation**: Microsoft TOM library yêu cầu Windows Desktop components.
+> .NET middleware không thể chạy native trên macOS.
+
+**Giải pháp đề xuất**: Azure Logic App làm TMSL proxy
+- See: [docs/ROADMAP_LOGIC_APP.md](docs/ROADMAP_LOGIC_APP.md)
+
+**Workaround hiện tại**: Tool generate TMSL script → User chạy trong SSMS/Tabular Editor
+
+---
+
 ## v1.0.0 - 2026-01-22
 
 ### 🏗️ Thay đổi Kiến trúc

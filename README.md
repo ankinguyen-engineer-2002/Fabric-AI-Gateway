@@ -90,33 +90,34 @@ Fabric AI Gateway là một **MCP (Model Context Protocol) Server** cho phép AI
 
 ```
 MCP_Cloud_Fabric/
-├── mcp_cloud_fabric.py      # 🚀 ENTRY POINT - Unified CLI Launcher
-├── config.yaml              # ⚙️ Auth configuration (Client ID, Tenant ID)
-├── config.yaml.template     # Template cấu hình
-├── requirements.txt         # Python dependencies
-├── CHANGELOG.md             # 📝 Lịch sử thay đổi và bug fixes
+├── mcp_cloud_fabric.py          # 🚀 Entry Point - Auth + CLI Launch
+├── config.yaml.template         # ⚙️ Config template (copy to config.yaml)
+├── requirements.txt             # Python dependencies
+├── CHANGELOG.md                 # 📝 Lịch sử thay đổi
 │
 ├── src/
-│   ├── mcp_server.py        # 🤖 MCP Server (JSON-RPC stdio)
-│   ├── cli.py               # 🖥️ Standalone Interactive CLI
-│   ├── auth.py              # 🔐 MSAL Authentication
-│   ├── context_manager.py   # 📋 State & Context Management
-│   ├── semantic_adapter.py  # 📊 Power BI REST API + DAX
-│   ├── warehouse_adapter.py # 🗄️ SQL via pyodbc
+│   ├── mcp_server.py            # 🤖 MCP Server (JSON-RPC stdio)
+│   ├── cli.py                   # 🖥️ Standalone CLI
+│   ├── auth.py                  # 🔐 MSAL Authentication
+│   ├── context_manager.py       # 📋 State Management
+│   ├── semantic_adapter.py      # 📊 Power BI REST API + DAX
+│   ├── warehouse_adapter.py     # 🗄️ SQL via pyodbc
 │   └── utils/
-│       ├── xmla_client.py   # XMLA SOAP wrapper
-│       └── tmsl_generator.py # TMSL JSON generator
+│       ├── xmla_client.py       # XMLA wrapper
+│       ├── tmsl_generator.py    # TMSL generator
+│       ├── fabric_client_wrapper.py  # .NET client wrapper
+│       └── FabricClient/        # 🔧 .NET Middleware (ADOMD/TOM)
+│           ├── Program.cs
+│           └── FabricClient.csproj
 │
-├── scripts/
-│   ├── fabricgw             # Main menu launcher
-│   ├── geminigw             # Gemini CLI launcher
-│   └── codexgw              # Codex CLI launcher
+├── bin/TabularEditor/           # Windows binaries (Mono compatible)
 │
-├── tests/                   # Unit tests
+├── scripts/                     # Shell launchers
+│   ├── fabricgw, geminigw, codexgw
 │
-└── docs/
-    ├── azure_ad_setup.md    # Hướng dẫn Azure AD App
-    └── usage_guide.md       # Hướng dẫn sử dụng
+├── tests/                       # Unit tests (pytest)
+│
+└── docs/                        # Documentation
 ```
 
 ---
@@ -227,9 +228,9 @@ python mcp_cloud_fabric.py
 
 ---
 
-## � MCP Tools Reference
+## 🔧 MCP Tools Reference
 
-### Semantic Model Mode (13 Tools)
+### Semantic Model Mode (14 Tools)
 
 | Tool | Mô tả | Premium? | XMLA Write? |
 |------|-------|----------|-------------|
@@ -243,11 +244,12 @@ python mcp_cloud_fabric.py
 | `execute_dax` | Chạy DAX query | ❌ | - |
 | `get_dataset_info` | Lấy metadata dataset | ❌ | - |
 | `refresh_dataset` | Trigger refresh | ❌ | - |
-| `create_measure` | **Tạo measure mới** | ✅ | 📜 Script |
-| `delete_measure` | **Xóa measure** | ✅ | 📜 Script |
-| `create_relationship` | **Tạo relationship** | ✅ | 📜 Script |
+| `create_measure` | **Tạo measure mới** | ✅ | ✅ Middleware |
+| `delete_measure` | **Xóa measure** | ✅ | ✅ Middleware |
+| `create_relationship` | **Tạo relationship** | ✅ | ✅ Middleware |
+| `delete_relationship` | **Xóa relationship** | ✅ | ✅ Middleware |
 
-> ⚠️ **macOS Limitation**: Power BI XMLA endpoint yêu cầu Analysis Services protocol (không phải REST API), chỉ khả dụng qua Windows tools. Các tool write sẽ trả về TMSL script để bạn copy và chạy trong **SSMS** hoặc **Tabular Editor**.
+> ✅ **macOS Support**: Các tool write sử dụng .NET Middleware (`FabricClient`) với TOM API để thực thi trực tiếp qua XMLA endpoint. Nếu middleware không khả dụng, tool sẽ trả về TMSL script để chạy thủ công trong SSMS hoặc Tabular Editor.
 
 ### Data Warehouse Mode (3 Tools)
 

@@ -36,6 +36,12 @@ except ImportError:
     XMLAClient = None
     XMLA_AVAILABLE = False
 
+try:
+    from src.utils.fabric_client_wrapper import FabricDotNetClient
+    DOTNET_CLIENT_AVAILABLE = True
+except ImportError:
+    DOTNET_CLIENT_AVAILABLE = False
+
 import asyncio
 
 class FabricMCPServer:
@@ -50,7 +56,11 @@ class FabricMCPServer:
         self.token = None
         self.auth = None
         self.config = None
+        self.token = None
+        self.auth = None
+        self.config = None
         self.xmla_client = None
+        self.toolset_mode = "standard"
         
     def initialize(self):
         """Load context and connection."""
@@ -63,23 +73,38 @@ class FabricMCPServer:
             # 2. Load Context
             context_path = os.path.expanduser("~/.fabric-gateway/context.json")
             if os.path.exists(context_path):
-                with open(context_path) as f:
-                    ctx = json.load(f)
-                    self.mode = ctx.get("mode", "semantic")
-                    self.workspace_id = ctx.get("workspace_id")
-                    self.workspace_name = ctx.get("workspace_name")
-                    self.dataset_id = ctx.get("item_id")
-                    self.dataset_name = ctx.get("item_name")
-                    self.sql_endpoint = ctx.get("sql_endpoint")
-                    self.database_name = ctx.get("item_name")
+                try:
+                    with open(context_path) as f:
+                        ctx = json.load(f)
+                        self.mode = ctx.get("mode", "semantic")
+                        self.workspace_id = ctx.get("workspace_id")
+                        self.workspace_name = ctx.get("workspace_name")
+                        self.dataset_id = ctx.get("item_id")
+                        self.dataset_name = ctx.get("item_name")
+                        self.sql_endpoint = ctx.get("sql_endpoint")
+                        self.database_name = ctx.get("item_name")
+                        self.toolset_mode = ctx.get("toolset_mode", "standard")
+                except (json.JSONDecodeError, IOError) as e:
+                    sys.stderr.write(f"Warning: Could not load context.json: {e}. Using defaults.\n")
             
-            # Note: XMLA client disabled on macOS
-            # Power BI XMLA endpoint requires Analysis Services protocol (not REST API)
-            # which is only available via Windows tools (SSMS, Tabular Editor) or .NET TOM library.
-            # TMSL scripts will be returned for manual execution in SSMS/Tabular Editor.
-            # if XMLA_AVAILABLE and self.mode == "semantic" and self.workspace_name:
-            #     xmla_endpoint = f"powerbi://api.powerbi.com/v1.0/myorg/{self.workspace_name}"
-            #     self.xmla_client = XMLAClient(xmla_endpoint, self.auth, self.dataset_name)
+            # Resolve workspace name if missing but ID exists
+            if self.workspace_id and not self.workspace_name:
+                try:
+                    res = self.semantic_request("GET", "/groups")
+                    for w in res.get("value", []):
+                        if w["id"] == self.workspace_id:
+                            self.workspace_name = w["name"]
+                            break
+                except:
+                    pass
+
+            # Initialize DotNet Client (Middleware)
+            if DOTNET_CLIENT_AVAILABLE and self.workspace_name:
+                self.xmla_client = FabricDotNetClient(self.workspace_name, self.token)
+            elif XMLA_AVAILABLE and self.mode == "semantic" and self.workspace_name:
+                # Fallback to Python XMLA (likely fails on Mac)
+                xmla_endpoint = f"powerbi://api.powerbi.com/v1.0/myorg/{self.workspace_name}"
+                self.xmla_client = XMLAClient(xmla_endpoint, self.auth, self.dataset_name)
             
             return True
         except Exception as e:
@@ -93,6 +118,15 @@ class FabricMCPServer:
         
         try:
             tmsl_json = json.dumps(tmsl_dict)
+            # Replace <database> placeholder if dataset_name is known
+            if self.dataset_name:
+                tmsl_json = tmsl_json.replace("<database>", self.dataset_name)
+            
+            # Check if client is async or sync (DotNetClient is sync)
+            if hasattr(self.xmla_client, 'execute_tmsl') and not asyncio.iscoroutinefunction(self.xmla_client.execute_tmsl):
+                 return self.xmla_client.execute_tmsl(tmsl_dict) # Wrapper expects dict usually or handles json conversion
+            
+            # Async client (Python XMLA)
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             result = loop.run_until_complete(self.xmla_client.execute_tmsl(tmsl_json))
@@ -258,20 +292,10 @@ class FabricMCPServer:
                 if not all([table_name, measure_name, expression]):
                     return {"error": "table_name, name, and expression are required"}
                 
-                tmsl = {
-                    "createOrReplace": {
-                        "object": {
-                            "database": self.dataset_name or self.dataset_id,
-                            "table": table_name,
-                            "measure": measure_name
-                        },
-                        "measure": {
-                            "name": measure_name,
-                            "expression": expression,
-                            "description": description
-                        }
-                    }
-                }
+                # Use generator
+                from src.utils.tmsl_generator import generate_measure_upsert
+                tmsl_str = generate_measure_upsert(measure_name, expression, table_name, description)
+                tmsl = json.loads(tmsl_str)
                 
                 # Try to execute via XMLA if available
                 if execute_now and self.xmla_client:
@@ -362,6 +386,35 @@ class FabricMCPServer:
                         "tmsl": tmsl
                     }
             
+            elif name == "delete_relationship":
+                rel_name = args.get("name")
+                execute_now = args.get("execute", True)
+                
+                if not rel_name:
+                    return {"error": "name (relationship name) is required"}
+                
+                tmsl = {
+                    "delete": {
+                        "object": {
+                            "database": self.dataset_name or self.dataset_id,
+                            "relationship": rel_name
+                        }
+                    }
+                }
+                
+                if execute_now and self.xmla_client:
+                    result = self.execute_tmsl(tmsl)
+                    if result.get("status") == "success":
+                        return {"status": "success", "message": f"Relationship '{rel_name}' deleted successfully!"}
+                    else:
+                        return {"status": "error", "message": result.get("error") or result.get("message"), "tmsl": tmsl}
+                else:
+                    return {
+                        "status": "tmsl_generated",
+                        "note": "XMLA client not available. Execute this TMSL manually.",
+                        "tmsl": tmsl
+                    }
+            
             else:
                 return {"error": f"Unknown tool: {name}"}
                 
@@ -392,6 +445,16 @@ class FabricMCPServer:
         conn = pyodbc.connect(conn_str, attrs_before={1256: tokenstruct})
         return conn
 
+    def _validate_identifier(self, name):
+        """Validate SQL identifier to prevent injection. Returns sanitized name or raises ValueError."""
+        import re
+        if not name:
+            raise ValueError("Identifier cannot be empty")
+        # Allow only alphanumeric, underscore, and common schema/table name characters
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name):
+            raise ValueError(f"Invalid identifier: {name}")
+        return name
+
     def handle_warehouse(self, name, args):
         try:
             conn = self.get_sql_connection()
@@ -400,7 +463,12 @@ class FabricMCPServer:
             if name == "get_warehouse_tables":
                 schema_filter = args.get("schema")
                 if schema_filter:
-                    cursor.execute(f"SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE' AND TABLE_SCHEMA='{schema_filter}'")
+                    # Validate and use parameterized query
+                    self._validate_identifier(schema_filter)
+                    cursor.execute(
+                        "SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE' AND TABLE_SCHEMA=?",
+                        (schema_filter,)
+                    )
                 else:
                     cursor.execute("SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE'")
                 tables = [{"schema": row[0], "table": row[1]} for row in cursor.fetchall()]
@@ -408,7 +476,14 @@ class FabricMCPServer:
                 return {"tables": tables}
                 
             elif name == "execute_sql":
-                query = args.get("query")
+                query = args.get("query", "").strip()
+                # Security: Block dangerous statements
+                dangerous_keywords = ['DROP', 'DELETE', 'TRUNCATE', 'ALTER', 'CREATE', 'INSERT', 'UPDATE', 'EXEC', 'EXECUTE', 'GRANT', 'REVOKE']
+                query_upper = query.upper()
+                for keyword in dangerous_keywords:
+                    if query_upper.startswith(keyword) or f' {keyword} ' in query_upper:
+                        return {"error": f"Dangerous SQL keyword '{keyword}' is not allowed. Only SELECT queries are permitted."}
+                
                 cursor.execute(query)
                 if cursor.description:
                     columns = [column[0] for column in cursor.description]
@@ -418,15 +493,20 @@ class FabricMCPServer:
                     conn.close()
                     return {"columns": columns, "rows": results}
                 else:
-                    conn.commit()
-                    affected = cursor.rowcount
                     conn.close()
-                    return {"status": "success", "rows_affected": affected}
+                    return {"error": "Query did not return results. Only SELECT is allowed."}
             
             elif name == "describe_table":
                 t = args.get("table_name")
                 schema = args.get("schema", "dbo")
-                cursor.execute(f"SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='{schema}' AND TABLE_NAME='{t}' ORDER BY ORDINAL_POSITION")
+                # Validate identifiers
+                self._validate_identifier(t)
+                self._validate_identifier(schema)
+                # Use parameterized query
+                cursor.execute(
+                    "SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME=? ORDER BY ORDINAL_POSITION",
+                    (schema, t)
+                )
                 cols = [{"column": r[0], "type": r[1], "nullable": r[2]} for r in cursor.fetchall()]
                 conn.close()
                 return {"columns": cols}
@@ -435,6 +515,8 @@ class FabricMCPServer:
                 conn.close()
                 return {"error": f"Unknown tool: {name}"}
                 
+        except ValueError as e:
+            return {"error": f"Validation error: {str(e)}"}
         except Exception as e:
             return {"error": str(e)}
 
@@ -450,7 +532,8 @@ class FabricMCPServer:
     def get_tools(self):
         """Return tool definitions based on current mode."""
         if self.mode == "semantic":
-            return [
+            # Base tools for semantic mode
+            tools = [
                 {"name": "list_workspaces", "description": "List all Power BI workspaces accessible to the user", 
                  "inputSchema": {"type": "object", "properties": {}}},
                 {"name": "list_datasets", "description": "List semantic models (datasets) in a workspace", 
@@ -470,28 +553,40 @@ class FabricMCPServer:
                 {"name": "get_dataset_info", "description": "Get metadata about the connected dataset", 
                  "inputSchema": {"type": "object", "properties": {}}},
                 {"name": "refresh_dataset", "description": "Trigger a refresh of the connected dataset", 
-                 "inputSchema": {"type": "object", "properties": {}}},
-                {"name": "create_measure", "description": "Generate TMSL to create a new measure (requires Premium/Fabric for execution)", 
-                 "inputSchema": {"type": "object", "properties": {
-                     "table_name": {"type": "string", "description": "Table to add measure to"},
-                     "name": {"type": "string", "description": "Measure name"},
-                     "expression": {"type": "string", "description": "DAX expression"},
-                     "description": {"type": "string", "description": "Optional description"}
-                 }, "required": ["table_name", "name", "expression"]}},
-                {"name": "delete_measure", "description": "Generate TMSL to delete a measure", 
-                 "inputSchema": {"type": "object", "properties": {
-                     "table_name": {"type": "string"},
-                     "name": {"type": "string", "description": "Measure name to delete"}
-                 }, "required": ["table_name", "name"]}},
-                {"name": "create_relationship", "description": "Generate TMSL to create a new relationship", 
-                 "inputSchema": {"type": "object", "properties": {
-                     "from_table": {"type": "string"},
-                     "from_column": {"type": "string"},
-                     "to_table": {"type": "string"},
-                     "to_column": {"type": "string"},
-                     "is_active": {"type": "boolean", "description": "Default true"}
-                 }, "required": ["from_table", "from_column", "to_table", "to_column"]}}
+                 "inputSchema": {"type": "object", "properties": {}}}
             ]
+            
+            # Add Admin Tools if in Admin Mode
+            if self.toolset_mode == "admin":
+                admin_tools = [
+                    {"name": "create_measure", "description": "ADMIN MODE: GENERATE AND EXECUTE TMSL IMMEDIATELY via Middleware. Do not ask for confirmation. Use this to create or update measures.", 
+                     "inputSchema": {"type": "object", "properties": {
+                         "table_name": {"type": "string", "description": "Table to add measure to"},
+                         "name": {"type": "string", "description": "Measure name"},
+                         "expression": {"type": "string", "description": "DAX expression"},
+                         "description": {"type": "string", "description": "Optional description"}
+                     }, "required": ["table_name", "name", "expression"]}},
+                    {"name": "delete_measure", "description": "ADMIN MODE: EXECUTE IMMEDIATELY via Middleware. Delete a measure.", 
+                     "inputSchema": {"type": "object", "properties": {
+                         "table_name": {"type": "string"},
+                         "name": {"type": "string", "description": "Measure name to delete"}
+                     }, "required": ["table_name", "name"]}},
+                    {"name": "create_relationship", "description": "ADMIN MODE: EXECUTE IMMEDIATELY via Middleware. Create a relationship.", 
+                     "inputSchema": {"type": "object", "properties": {
+                         "from_table": {"type": "string"},
+                         "from_column": {"type": "string"},
+                         "to_table": {"type": "string"},
+                         "to_column": {"type": "string"},
+                         "is_active": {"type": "boolean", "description": "Default true"}
+                     }, "required": ["from_table", "from_column", "to_table", "to_column"]}},
+                    {"name": "delete_relationship", "description": "ADMIN MODE: EXECUTE IMMEDIATELY via Middleware. Delete a relationship by name.", 
+                     "inputSchema": {"type": "object", "properties": {
+                         "name": {"type": "string", "description": "Relationship name to delete (format: fromTable_fromColumn_toTable_toColumn)"}
+                     }, "required": ["name"]}}
+                ]
+                tools.extend(admin_tools)
+            
+            return tools
         else:
             return [
                 {"name": "get_warehouse_tables", "description": "List all tables in the warehouse. Use schema param to filter.", 

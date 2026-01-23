@@ -48,35 +48,18 @@ def generate_measure_upsert(
     if format_string:
         measure_def["formatString"] = format_string
     
-    if display_folder:
-        measure_def["displayFolder"] = display_folder
+    # Smart JSON for Middleware (TOM-based)
+    # We use a custom format that FabricClient recognizes and handles via TOM.
+    # This bypasses the complexity/incompatibility of raw TMSL for Measures.
     
-    # Build the full TMSL command
-    # Note: For createOrReplace, we need to specify the full path
-    if table:
-        tmsl = {
-            "createOrReplace": {
-                "object": {
-                    "database": "<database>",  # Will be replaced by catalog
-                    "table": table,
-                    "measure": name
-                },
-                "measure": measure_def
-            }
-        }
-    else:
-        # If no table specified, use alter to modify existing measure
-        tmsl = {
-            "alter": {
-                "object": {
-                    "database": "<database>",
-                    "measure": name
-                },
-                "measure": measure_def
-            }
-        }
+    payload = {
+        "operation": "upsert_measure",
+        "database": "<database>", 
+        "table": table,
+        "measure": measure_def
+    }
     
-    return json.dumps(tmsl, indent=2)
+    return json.dumps(payload, indent=2)
 
 
 def generate_measure_delete(name: str, table: Optional[str] = None) -> str:
@@ -90,21 +73,15 @@ def generate_measure_delete(name: str, table: Optional[str] = None) -> str:
     Returns:
         TMSL JSON string
     """
-    delete_obj = {
+    # Smart JSON for Middleware (TOM-based)
+    payload = {
+        "operation": "delete_measure",
         "database": "<database>",
+        "table": table,
         "measure": name
     }
     
-    if table:
-        delete_obj["table"] = table
-    
-    tmsl = {
-        "delete": {
-            "object": delete_obj
-        }
-    }
-    
-    return json.dumps(tmsl, indent=2)
+    return json.dumps(payload, indent=2)
 
 
 def generate_measure_create(
